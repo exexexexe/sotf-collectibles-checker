@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forest Collectibles Checker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a field-notebook column — load panel, then one ledger per achievement, missing items first. */
+:root {
+  --bg: #eef0ea;
+  --surface: #f8f9f5;
+  --ink: #1c2420;
+  --muted: #5c6a62;
+  --line: #cfd6cd;
+  --accent: #9a6b14;      /* solafite gold */
+  --accent-soft: #f1e4c4;
+  --have: #2f6b45;
+  --have-soft: #dcebdf;
+  --miss: #a3402a;
+  --miss-soft: #f4dcd4;
+  --font-display: "Special Elite", "Courier New", monospace;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121815; --surface: #19211d; --ink: #e3e9e4; --muted: #93a39a; --line: #2c3833;
+    --accent: #d9a648; --accent-soft: #3a2f18; --have: #7cc394; --have-soft: #1d3326;
+    --miss: #ee8a72; --miss-soft: #3d221b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121815; --surface: #19211d; --ink: #e3e9e4; --muted: #93a39a; --line: #2c3833;
+  --accent: #d9a648; --accent-soft: #3a2f18; --have: #7cc394; --have-soft: #1d3326;
+  --miss: #ee8a72; --miss-soft: #3d221b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 920px; margin: 0 auto; display: grid; gap: 28px; }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.1; }
+h2 { font-size: 22px; }
+p { margin: 0; max-width: 65ch; }
+.lede { color: var(--muted); }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+
+.load { background: var(--surface); border: 1px dashed var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; }
+.load.drag { border-color: var(--accent); background: var(--accent-soft); }
+.load-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.btn {
+  font: 500 14px var(--font-body); color: var(--bg); background: var(--ink); border: 0; border-radius: 6px;
+  padding: 10px 16px; cursor: pointer;
+}
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn:focus-visible, input:focus-visible + label, .toggle input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.path { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.path code {
+  font-family: var(--font-mono); font-size: 12.5px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; min-width: 0;
+}
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--muted); font-size: 14px; }
+.steps b { color: var(--ink); font-weight: 600; }
+.status { font-size: 14px; }
+.status.err { color: var(--miss); }
+.status .tag { font-family: var(--font-mono); font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-right: 6px; }
+
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; text-decoration: none; color: inherit; }
+.tile:hover { border-color: var(--accent); }
+.tile .name { font-size: 13px; color: var(--muted); }
+.tile .ach { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.tile .num { font-family: var(--font-mono); font-size: 26px; font-variant-numeric: tabular-nums; }
+.tile .num small { font-size: 14px; color: var(--muted); }
+.bar { height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--have); }
+.tile.done .bar i { background: var(--accent); }
+
+.controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+section.ledger { display: grid; gap: 12px; scroll-margin-top: 16px; }
+.ledger-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.ledger-head .meta { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.group-label { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+ul.items { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 14px; }
+ul.items li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 8px 10px; border-radius: 8px; min-width: 0; }
+ul.items li.miss { background: var(--miss-soft); }
+ul.items li.have { color: var(--muted); }
+.mark { font-family: var(--font-mono); font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 99px; margin-top: 2px; white-space: nowrap; }
+li.miss .mark { color: var(--miss); border: 1px solid var(--miss); }
+li.have .mark { color: var(--have); background: var(--have-soft); border: 1px solid transparent; }
+.label { min-width: 0; }
+.label .t { display: block; }
+li.miss .label .t { color: var(--ink); font-weight: 500; }
+.label .id { display: block; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.empty-done { font-family: var(--font-display); color: var(--accent); font-size: 18px; }
+footer { color: var(--muted); font-size: 13px; display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 16px; }
+footer p { max-width: 80ch; }
+.mapcard { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+@media (max-width: 760px) { .mapcard { grid-template-columns: minmax(0, 1fr); } }
+.mapbox { position: relative; width: 100%; aspect-ratio: 1; max-width: 100%; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+.mapbox img, .mapbox svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.mapbox svg .pin { cursor: pointer; }
+.mapbox svg .pin circle, .mapbox svg .pin rect { stroke: #10140f; stroke-width: 1.5; }
+.mapbox svg .pin.have { opacity: .45; }
+.mapbox svg .pin.sel circle, .mapbox svg .pin.sel rect { stroke: #fff; stroke-width: 3; }
+.mapbox svg .halo { fill: none; stroke: #fff; stroke-width: 2.5; }
+.mapbox svg .you circle { fill: #fff; stroke: #10140f; stroke-width: 2; }
+.mapbox svg text { font: 600 15px var(--font-body); fill: #fff; paint-order: stroke; stroke: #10140f; stroke-width: 3px; }
+.mapside { display: grid; gap: 14px; min-width: 0; }
+.legend { display: grid; gap: 8px; font-size: 13.5px; }
+.legend label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.legend input { accent-color: var(--accent); width: 16px; height: 16px; }
+.sw { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #10140f; flex: none; }
+.sw.sq { border-radius: 2px; transform: rotate(45deg); }
+.key { color: var(--muted); font-size: 12.5px; display: grid; gap: 4px; }
+.key span { display: flex; align-items: center; gap: 8px; }
+.info { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 14px; display: grid; gap: 4px; min-height: 84px; }
+.info .t { font-weight: 600; }
+.info .sub { color: var(--muted); font-size: 13px; }
+.info .coords { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.where { display: block; font-size: 12.5px; color: var(--muted); }
+li.miss .where { color: var(--ink); opacity: .8; }
+.mapbtn { font: 500 12px var(--font-body); color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.mapbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ul.items li.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (prefers-reduced-motion: no-preference) { .bar i { transition: width .4s ease; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Sons of the Forest · 100% helper</span>
+    <h1>Forest Collectibles Checker</h1>
+    <p class="lede">Steam only tells you how many you have left. Load your save and this page lists exactly what you are still missing for the collection achievements: notes, blueprints, plated weapons, clothing, action camera videos, food, and crafted and printed items. It also shows where each one is on the map. The lists and positions come straight from the game's own files.</p>
+  </header>
+
+  <div class="load" id="drop">
+    <div class="load-row">
+      <input type="file" id="file" accept=".zip,.json" multiple hidden>
+      <button class="btn" id="pick" type="button">Choose save file…</button>
+      <button class="btn ghost" id="sample" type="button">Show example save</button>
+      <span class="status" id="status"></span>
+    </div>
+    <ol class="steps">
+      <li>Press <b>Win + R</b>, paste the path below and press Enter.</li>
+      <li>Open your Steam ID folder, then <b>SinglePlayer</b> (or <b>Multiplayer</b> if you host, <b>MultiplayerClient</b> if you join someone).</li>
+      <li>Open the save's number folder and pick <b>SaveData.zip</b>. Older saves have loose files instead: pick <b>PlayerStateSaveData.json</b>. You can also drop the file on this box.</li>
+    </ol>
+    <div class="path">
+      <code id="pathText">%USERPROFILE%\AppData\LocalLow\Endnight\SonsOfTheForest\Saves</code>
+      <button class="btn ghost" id="copy" type="button">Copy path</button>
+    </div>
+  </div>
+
+  <div class="summary" id="summary"></div>
+
+  <section class="mapcard" aria-label="Island map">
+    <div class="mapbox">
+      <img src="map.jpg" alt="Map of the island, north up">
+      <svg id="map" viewBox="0 0 1000 1000" role="img" aria-label="Item locations"></svg>
+    </div>
+    <div class="mapside">
+      <div class="legend">
+        <label><input type="checkbox" id="show-notes" checked><span class="sw" style="background:#f2f2ea"></span>Note pages</label>
+        <label><input type="checkbox" id="show-blueprints" checked><span class="sw" style="background:#5fb0e6"></span>Blueprints</label>
+        <label><input type="checkbox" id="show-plated" checked><span class="sw" style="background:#e8b33c"></span>Weapons to plate</label>
+        <label><input type="checkbox" id="show-clothing" checked><span class="sw" style="background:#c77dd6"></span>Clothing</label>
+        <label><input type="checkbox" id="show-footage" checked><span class="sw" style="background:#ef6b57"></span>Action cameras</label>
+      </div>
+      <div class="key">
+        <span><span class="sw" style="background:var(--muted)"></span>Above ground</span>
+        <span><span class="sw sq" style="background:var(--muted)"></span>Underground (cave, bunker, cellar). The marker sits right above it.</span>
+        <span><span class="sw" style="background:#fff"></span>Where you saved</span>
+        <span>Faded markers are items you already have.</span>
+      </div>
+      <div class="info" id="info"><span class="sub">Click a marker, or "Show on map" in the lists below.</span></div>
+    </div>
+  </section>
+
+  <div class="controls">
+    <label class="toggle"><input type="checkbox" id="onlyMissing"> Show only what I'm missing</label>
+  </div>
+
+  <div id="ledgers" class="wrap" style="gap:32px"></div>
+
+  <footer>
+    <p>Your file is read in your browser and never uploaded. The checker reads the save's player state: <code>hasOwned</code> for notes and clothing, <code>DiscoverablePageUnlocked</code> for blueprints, <code>isPlated</code> for weapons, <code>consumed</code> for food, <code>crafted</code> for crafted and printed items, and <code>ActionCameraVideoCollected</code> for videos. It checks one save at a time.</p>
+    <p>Item names are the game's internal names, made readable. A note or piece of clothing counts once you have picked it up. Blueprints count once they are added to your blueprint book. A weapon counts once it has been plated at the Solafite plater. Food counts once you have eaten it, and crafted or printed items once you have made one. Count-based achievements (logs placed, days survived, holes dug) are left out, since Steam already shows those numbers.</p>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+// IDs extracted from the game's own achievement assets (NotePagesAchievement -> ItemIdSet "StoryPagesItems",
+// DiscoverableBlueprintsAchievement._requiredItems, PlatedWeaponsAchievement._requiredItems).
+const CATEGORIES = [
+  {
+    key: "notes", title: "Note pages", achievement: "Gumshoe", check: "hasOwned",
+    groups: [
+      ["Email printouts", [
+        [521, "Email printout: Cave lighting", "EmailPrintoutCaveLighting"],
+        [526, "Email printout: Mr. Puffy's will", "EmailPrintoutMrPuffyWill"],
+        [534, "Email printout: Golf A", "EmailPrintoutGolfA"],
+        [535, "Email printout: Golf B", "EmailPrintoutGolfB"],
+        [536, "Email printout: Golf C", "EmailPrintoutGolfC"],
+        [537, "Email printout: Golf D", "EmailPrintoutGolfD"],
+        [538, "Email printout: Painting", "EmailPrintoutPaintingA"],
+        [540, "Email printout: Astrology B", "EmailPrintoutAstrologyB"],
+        [542, "Email printout: Politician A", "EmailPrintoutPoliticianA"],
+        [543, "Email printout: Politician B", "EmailPrintoutPoliticianB"],
+        [544, "Email printout: Politician C", "EmailPrintoutPoliticianC"],
+        [545, "Email printout: Ballet", "EmailPrintoutBalletA"],
+        [546, "Email printout: Squeaky shoes A", "EmailPrintoutSqueakyShoesA"],
+        [547, "Email printout: Squeaky shoes B", "EmailPrintoutSqueakyShoesB"],
+        [548, "Email printout: Squeaky shoes C", "EmailPrintoutSqueakyShoesC"],
+        [614, "Email printout: Government A", "EmailPrintoutGovernmentA"],
+        [615, "Email printout: Government B", "EmailPrintoutGovernmentB"],
+        [616, "Email printout: Government C", "EmailPrintoutGovernmentC"],
+        [694, "Email printout: Jianyu", "JianyuEmailPrintoutA"],
+        [677, "Fishing email A", "FishingEmailA"],
+        [678, "Fishing email B", "FishingEmailB"],
+        [692, "Fishing email C", "FishingEmailC"],
+        [687, "Puffton email A", "PufftonEmailA"],
+        [722, "Puffton email B", "PufftonEmailB"],
+        [723, "Puffton email C", "PufftonEmailC"],
+      ]],
+      ["Personal and old notes", [
+        [653, "Personal note A", "PersonalNoteA"],
+        [654, "Personal note B", "PersonalNoteB"],
+        [655, "Personal note C", "PersonalNoteC"],
+        [718, "Personal note E", "PersonalNoteE"],
+        [720, "Personal note G", "PersonalNoteG"],
+        [674, "Old note A", "OldNoteA"],
+        [675, "Old note B", "OldNoteB"],
+        [676, "Old note C", "OldNoteC"],
+        [685, "Old note D", "OldNoteD"],
+        [684, "Old note E", "OldNoteE"],
+        [691, "Old note F", "OldNoteF"],
+        [717, "Old note G", "OldNoteG"],
+      ]],
+      ["Cult signs and bible pages", [
+        [686, "Cult sign F", "CultSignF"],
+        [695, "Cult sign G", "CultSignG"],
+        [696, "Cult sign H", "CultSignH"],
+        [697, "Cult sign I", "CultSignI"],
+        [698, "Cult sign J", "CultSignJ"],
+        [699, "Cult sign K", "CultSignK"],
+        [716, "Bible page D", "BiblePaperD"],
+        [721, "Bible paper scrap A", "BiblePaperScrapA"],
+      ]],
+      ["Newspapers, maps and printouts", [
+        [612, "Newspaper cutout", "NewspaperCutout"],
+        [613, "Newspaper cutout: Outbid", "NewspaperCutoutOutbid"],
+        [706, "Newspaper cutout D", "NewspaperDCutout"],
+        [611, "Numbers printout", "NumbersPrintout"],
+        [693, "Bunker map A", "BunkerMapA"],
+      ]],
+    ],
+  },
+  {
+    key: "blueprints", title: "Blueprints", achievement: "Interior Designer", check: "blueprint",
+    groups: [["Discoverable blueprints", [
+      [665, "Item plater (Solafite)", "BlueprintItemPlating"],
+      [714, "Gold armor plater", "BlueprintGoldArmorPlater"],
+      [666, "Powered cross", "BlueprintPoweredCross"],
+      [670, "Gore chair", "BlueprintGoreChair"],
+      [671, "Gore couch", "BlueprintGoreCouch"],
+      [672, "Uber trap", "BlueprintUberTrap"],
+      [679, "Grind trap", "BlueprintGrindTrap"],
+      [682, "Spin trap", "BlueprintSpinTrap"],
+      [688, "Spear thrower trap", "BlueprintSpearThrowerTrap"],
+      [680, "Spotlight", "BlueprintSpotlight"],
+      [681, "Clock", "BlueprintClock"],
+      [701, "Leg lamp", "BlueprintLegLamp"],
+      [709, "Teleporter", "BlueprintTeleporter"],
+      [711, "Attract shrine", "BlueprintAttractShrine"],
+      [710, "Repel shrine", "BlueprintRepelShrine"],
+      [726, "Hang glider launcher", "BlueprintHangGliderLauncher"],
+    ]]],
+  },
+  {
+    key: "plated", title: "Solafite-plated weapons", achievement: "Oooh Shiny", check: "isPlated",
+    groups: [["Weapons to plate", [
+      [340, "Guitar", "Guitar"],
+      [361, "Rifle", "Rifle"],
+      [358, "Pump shotgun", "ShotgunPumpAction"],
+      [386, "Revolver", "Revolver"],
+      [355, "Compact pistol", "CompactPistol"],
+      [468, "Cross", "Cross"],
+      [379, "Tactical axe", "TacticalAxe"],
+      [359, "Machete", "Machete2"],
+      [477, "Crafted club", "CraftedClub"],
+      [431, "Fire axe", "FireAxe"],
+      [356, "Modern axe", "ModernAxe"],
+      [663, "Pickaxe", "Pickaxe"],
+      [525, "Golf putter", "GolfPutter"],
+      [367, "Katana", "Katana"],
+    ]]],
+  },
+  {
+    key: "clothing", title: "Clothing", achievement: "Own all clothing", check: "hasOwned",
+    groups: [
+      ["For you", [
+        [490, "Hoodie", "Hoodie"],
+        [493, "Leather jacket", "LeatherJacket"],
+        [491, "Old jacket", "OldJacket"],
+        [500, "Puffy jacket", "PuffyJacket"],
+        [487, "Silk pyjamas", "SilkPyjamas"],
+        [492, "Tuxedo", "Tuxedo"],
+        [499, "Wetsuit", "Wetsuit"],
+      ]],
+      ["Outfits for Virginia", [
+        [558, "Camo suit", "VirginiaCamoSuit"],
+        [556, "Dress", "VirginiaDress"],
+        [557, "Leather suit", "VirginiaLeatherSuit"],
+        [555, "Track suit", "VirginiaTrackSuit"],
+      ]],
+    ],
+  },
+  {
+    key: "footage", title: "Action camera videos", achievement: "Found footage", check: "footage",
+    groups: [["Videos", [
+      [9001, "Cultists (first video)", "Cultists1"],
+      [9002, "Cultists' arrival", "CultistsArrival"],
+      [9003, "Sahara Confidential", "Sahara Confidential"],
+      [9004, "Estate Agent", "Estate Agent"],
+    ]]],
+  },
+  {
+    key: "edibles", title: "Things to eat", achievement: "Eat every edible", check: "consumed",
+    where: "Turns up in many places",
+    groups: [
+      ["Plants and berries", [
+        [451, "Aloe vera", "AloeVera"],
+        [454, "Arrowleaf balsamroot", "ArrowleafBalsamroot"],
+        [595, "Blackberries", "Blackberries"],
+        [445, "Blueberries", "Blueberries"],
+        [465, "Chicory", "Chicory"],
+        [449, "Devil's club", "DevilsClub"],
+        [453, "Fireweed", "Fireweed"],
+        [594, "Guarana berries", "GuaranaBerries"],
+        [450, "Horsetail", "Horsetail"],
+        [447, "Salmonberries", "Salmonberries"],
+        [448, "Snowberries", "Snowberries"],
+        [446, "Twinberries", "Twinberries"],
+        [452, "Yarrow", "Yarro"],
+      ]],
+      ["Mushrooms", [
+        [400, "Fly amanita", "FlyAmanitaMushroom", "Poisonous, but eating it still counts"],
+        [399, "Hedgehog mushroom", "HydnumRepandumMushroom"],
+        [398, "King oyster mushroom", "KingOysterMushroom"],
+        [397, "Shiitake", "ShiitakeMushroom"],
+      ]],
+      ["Meat and fish", [
+        [433, "Meat", "Meat", "Hunt an animal"],
+        [436, "Fish", "Fish", "Catch one in a river, lake or the sea"],
+        [466, "Oyster", "Oyster"],
+        [401, "Turtle egg", "TurtleEgg", "Turtle nests on the beach"],
+        [480, "Severed arm", "SeveredArm", "Cut from a body"],
+        [481, "Severed leg", "SeveredLeg", "Cut from a body"],
+      ]],
+      ["Packaged food and drink", [
+        [425, "Cereal box", "CerealBox"],
+        [441, "Energy bar", "EnergyBar"],
+        [439, "Energy drink (Fi-Z)", "EnergyDrink"],
+        [569, "Food cube: brain", "FoodCubeBrain"],
+        [570, "Food cube: steak", "FoodCubeSteak"],
+        [571, "Food cube: steak and bacon", "FoodCubeSteakAndBacon"],
+        [438, "MRE pack", "MrePack"],
+        [437, "Pills", "Pills"],
+        [421, "Ramen noodles", "RamenNoodles"],
+      ]],
+      ["Crafted", [
+        [464, "Cat food", "CatFood", "Craft it"],
+        [461, "Energy mix", "EnergyMix", "Craft it"],
+        [462, "Energy mix+", "EnergyMixPlus", "Craft it"],
+        [455, "Health mix", "HealthMix", "Craft it"],
+        [456, "Health mix+", "HealthMixPlus", "Craft it"],
+      ]],
+    ],
+  },
+  {
+    key: "crafted", title: "Weapons to craft", achievement: "Craft all weapons", check: "crafted",
+    where: "Craft it from your inventory",
+    groups: [["Crafted weapons", [
+      [443, "Crafted bow", "CraftedBow"],
+      [477, "Crafted club", "CraftedClub"],
+      [474, "Crafted spear", "CraftedSpear"],
+      [422, "Repair tool", "RepairTool"],
+      [503, "Torch", "Torch"],
+    ]]],
+  },
+  {
+    key: "printed", title: "3D-printed items", achievement: "Print all items", check: "crafted",
+    where: "Print it at a 3D printer (uses resin)",
+    groups: [["Printer designs", [
+      [618, "Printed arrow", "3dPrintedArrow"],
+      [426, "Printed flask", "3dPrintedFlask"],
+      [560, "Printed grappling hook", "3dPrintedGrapplingHook"],
+      [428, "Printed sled", "3dPrintedSled"],
+      [553, "Tech mesh", "TechMesh"],
+      [391, "Red mask", "RedMask"],
+    ]]],
+  },
+];
+
+// Example progress from a real 34-day Hard save, shown until a save is loaded.
+const EXAMPLE = {
+  owned: [521,526,537,538,540,542,543,544,545,546,547,611,613,614,615,616,653,654,674,676,677,678,684,687,691,693,694,696,698,716,717,718,720,721,722,723,
+          665,666,671,679,680,681,682,688,701,709,710,711,714,726, 490,493,491,492,499,558,556,557,555],
+  pages: [665,666,671,679,680,681,682,688,701,709,710,711,714,726],
+  plated: [340,361,367,431,572],
+  consumed: [437,445,397,433,439,465,438,466,447,441,571,570,425,455,569,446,436,481,594,449,595,454,453,451,448,398,399,461,480,462,464],
+  crafted: [422,443,474,503,618,426,560,428,553,391],
+  footage: ["Cultists1", "Sahara Confidential", "Estate Agent"],
+};
+
+// Where each item is placed in the world (x, z, place, underground), read from the game's scene files.
+const LOCS = {"716":[[1478,74,"Overworld",0]],"525":[[1026,1642,"Overworld",0],[727,1681,"Overworld",0],[1025,1216,"Overworld",0],[1036,1518,"Overworld",0],[1100,990,"Overworld",0],[1589,1337,"Overworld",0],[1083,1568,"Overworld",0],[1616,1567,"Overworld",0],[1125,-606,"Residential bunker",1]],"671":[[189,-332,"Overworld",0]],"676":[[190,-330,"Overworld",0]],"686":[[466,1212,"Overworld",0]],"697":[[420,1172,"On the yacht wreck",0]],"535":[[726,1682,"Overworld",0]],"674":[[1703,1014,"Overworld",0]],"615":[[-704,446,"Overworld",0]],"682":[[1454,753,"Overworld",0]],"670":[[1823,-496,"Overworld",0]],"359":[[-47,1458,"Overworld",0]],"542":[[1059,1023,"Overworld",0]],"675":[[1832,-476,"Overworld",0]],"685":[[1821,-497,"Overworld",0]],"356":[[-704,446,"Overworld",0]],"706":[[1943,454,"Overworld",0]],"548":[[1066,1034,"Overworld",0]],"709":[[-1151,-1608,"Overworld",0]],"695":[[466,1210,"Overworld",0]],"701":[[1474,72,"Overworld",0]],"696":[[420,-1810,"Overworld",0]],"616":[[-1118,-1603,"Overworld",0]],"536":[[727,1682,"Overworld",0]],"717":[[-111,-92,"Overworld",0]],"694":[[-950,218,"Overworld",0]],"534":[[726,1681,"Overworld",0]],"544":[[-1393,-1117,"Overworld",0]],"355":[[-1797,579,"On the washed-up raft",0]],"726":[[-955,162,"Inside a cellar hatch",1]],"358":[[-1341,1412,"Buried in a grave (dig with the shovel)",0]],"680":[[1457,-615,"Inside a cellar hatch",1]],"612":[[417,1171,"On the yacht wreck",0]],"710":[[1505,-448,"Inside a cellar hatch",1]],"711":[[-1648,-951,"Inside a cellar hatch",1]],"672":[[-964,-1486,"Inside a cellar hatch",1]],"613":[[-429,1498,"Cave A (rebreather cave)",1]],"666":[[-649,1389,"Cave A (rebreather cave)",1]],"521":[[-1017,-264,"Cave B (rope gun cave)",1]],"545":[[-1140,-234,"Cave B (rope gun cave)",1]],"468":[[-1175,-218,"Cave B (rope gun cave)",1]],"540":[[-941,-293,"Cave B (rope gun cave)",1]],"361":[[678,-282,"Cave D",1]],"688":[[-115,-1038,"Ice cave",1]],"691":[[459,-226,"Ice cave",1]],"681":[[461,-228,"Ice cave",1]],"538":[[-424,702,"Maintenance bunker A",1]],"431":[[-415,712,"Maintenance bunker A",1]],"386":[[1141,1049,"Maintenance bunker C",1]],"692":[[1140,1049,"Maintenance bunker C",1]],"653":[[-1194,37,"Entertainment bunker",1]],"655":[[-1134,63,"Entertainment bunker",1]],"543":[[-1179,28,"Entertainment bunker",1]],"340":[[-1158,18,"Entertainment bunker",1]],"693":[[-1173,31,"Entertainment bunker",1]],"611":[[-1128,103,"Entertainment bunker",1]],"546":[[-1157,30,"Entertainment bunker",1]],"677":[[-972,1036,"Food bunker",1]],"547":[[-976,1036,"Food bunker",1]],"723":[[1161,-603,"Residential bunker",1]],"718":[[1139,-644,"Residential bunker",1]],"687":[[1134,-646,"Residential bunker",1]],"367":[[1160,-652,"Residential bunker",1]],"722":[[1191,-627,"Residential bunker",1]],"678":[[1166,-646,"Residential bunker",1]],"614":[[1165,-654,"Residential bunker",1]],"537":[[1126,-605,"Residential bunker",1]],"720":[[1615,484,"Luxury bunker",1]],"698":[[1624,570,"Luxury bunker",1]],"699":[[1645,524,"Luxury bunker",1]],"654":[[1619,511,"Luxury bunker",1]],"721":[[1154,523,"Final cave, below the Luxury bunker",1]],"526":[[1629,569,"Luxury bunker",1]],"714":[[1598,486,"Luxury bunker",1]],"663":[[1414,735,"Cave F",1]],"665":[[1333,699,"Cave F",1]],"684":[[1694,1033,"Cave G",1]],"679":[[1720,1065,"Cave G",1]],
+  "490":[[-1395,-1117,"Overworld",0]],"493":[[-971,-1062,"Overworld",0]],"491":[[419,-1803,"Overworld",0]],"500":[[1082,1573,"Overworld",0]],
+  "487":[[422,1169,"On the yacht wreck",0]],"492":[[-417,696,"Maintenance bunker A",1]],"499":[[-509,128,"Cave C",1]],
+  "558":[[1246,-667,"Overworld",0]],"556":[[1623,568,"Luxury bunker",1]],"557":[[1144,-640,"Residential bunker",1]],"555":[[-1194,38,"Entertainment bunker",1]],
+  "9001":[[1138,-621,"Residential bunker (morgue)",1]],"9002":[[468,1216,"On the yacht wreck",0]],"9003":[[1066,1034,"Overworld",0]],"9004":[[1621,499,"Luxury bunker",1]]};
+
+const pad8 = n => String(n).padStart(8, "0");
+let state = null;
+
+function stateFromEntries(entries) {
+  const on = new Set(entries.filter(e => e && e.BoolValue === true).map(e => e.Name));
+  const counted = new Set(entries.filter(e => e && e.IntValue > 0).map(e => e.Name));
+  const pos = entries.find(e => e && e.Name === "player.position");
+  return {
+    player: pos && Array.isArray(pos.FloatArrayValue) ? pos.FloatArrayValue : null,
+    hasOwned: id => on.has("hasOwned_" + pad8(id)),
+    blueprint: id => on.has("DiscoverablePageUnlocked_" + id) || on.has("hasOwned_" + pad8(id)),
+    isPlated: id => on.has("isPlated_" + pad8(id)),
+    consumed: id => counted.has("consumed." + pad8(id)),
+    crafted: id => counted.has("crafted." + pad8(id)),
+    footage: (id, internal) => on.has("ActionCameraVideoCollected_" + internal),
+  };
+}
+function exampleState() {
+  const entries = [
+    ...EXAMPLE.owned.map(i => ({ Name: "hasOwned_" + pad8(i), BoolValue: true })),
+    ...EXAMPLE.pages.map(i => ({ Name: "DiscoverablePageUnlocked_" + i, BoolValue: true })),
+    ...EXAMPLE.plated.map(i => ({ Name: "isPlated_" + pad8(i), BoolValue: true })),
+    ...EXAMPLE.consumed.map(i => ({ Name: "consumed." + pad8(i), IntValue: 1 })),
+    ...EXAMPLE.crafted.map(i => ({ Name: "crafted." + pad8(i), IntValue: 1 })),
+    ...EXAMPLE.footage.map(n => ({ Name: "ActionCameraVideoCollected_" + n, BoolValue: true })),
+    { Name: "player.position", FloatArrayValue: [-742, 127, -32] },
+  ];
+  return stateFromEntries(entries);
+}
+
+function parsePlayerState(text) {
+  const outer = JSON.parse(text);
+  let inner = outer?.Data?.PlayerState;
+  if (typeof inner === "string") inner = JSON.parse(inner);
+  const entries = inner?._entries || outer?._entries;
+  if (!Array.isArray(entries)) throw new Error("This file has no player progress in it.");
+  return entries;
+}
+
+async function loadFiles(files) {
+  const status = document.getElementById("status");
+  status.className = "status";
+  status.textContent = "Reading…";
+  try {
+    let text = null, label = "";
+    for (const f of files) {
+      if (/\.zip$/i.test(f.name)) {
+        const zip = await JSZip.loadAsync(f);
+        const entry = Object.values(zip.files).find(z => /(^|\/)PlayerStateSaveData\.json$/i.test(z.name));
+        if (!entry) throw new Error(`${f.name} has no PlayerStateSaveData.json inside. Pick the SaveData.zip from a save folder.`);
+        text = await entry.async("string"); label = f.name; break;
+      }
+      if (/PlayerStateSaveData\.json$/i.test(f.name)) { text = await f.text(); label = f.name; break; }
+    }
+    if (text === null) throw new Error("Pick SaveData.zip, or PlayerStateSaveData.json for older saves.");
+    state = stateFromEntries(parsePlayerState(text));
+    status.innerHTML = `<span class="tag">Your save</span>Loaded ${escapeHtml(label)}`;
+    render();
+  } catch (err) {
+    status.className = "status err";
+    status.textContent = err.message || String(err);
+  }
+}
+
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+function render() {
+  const onlyMissing = document.getElementById("onlyMissing").checked;
+  const summary = document.getElementById("summary");
+  const ledgers = document.getElementById("ledgers");
+  summary.innerHTML = ""; ledgers.innerHTML = "";
+
+  for (const cat of CATEGORIES) {
+    const all = cat.groups.flatMap(g => g[1]);
+    const has = it => state[cat.check](it[0], it[2]);
+    const got = all.filter(has).length;
+    const total = all.length, done = got === total;
+
+    summary.insertAdjacentHTML("beforeend", `
+      <a class="tile${done ? " done" : ""}" href="#${cat.key}">
+        <span class="ach">${cat.achievement}</span>
+        <span class="name">${cat.title}</span>
+        <span class="num">${got}<small> / ${total}</small></span>
+        <span class="bar"><i style="width:${(got / total * 100).toFixed(1)}%"></i></span>
+        <span class="name">${done ? "Complete" : `${total - got} missing`}</span>
+      </a>`);
+
+    let body = "";
+    for (const [gname, items] of cat.groups) {
+      const sorted = [...items].sort((a, b) => has(a) - has(b));
+      const shown = onlyMissing ? sorted.filter(it => !has(it)) : sorted;
+      if (!shown.length) continue;
+      if (cat.groups.length > 1) body += `<div class="group-label">${gname}</div>`;
+      body += `<ul class="items">` + shown.map(it => {
+        const [id, label, internal] = it;
+        const h = has(it);
+        const locs = LOCS[id] || [];
+        const where = locs.length
+          ? `<span class="where">${placeText(locs[0])}${locs.length > 1 ? ` (+${locs.length - 1} more)` : ""} · <button class="mapbtn" type="button" data-id="${id}">Show on map</button></span>`
+          : `<span class="where">${noLocText(cat, it)}</span>`;
+        return `<li class="${h ? "have" : "miss"}${selected === id ? " sel" : ""}" id="item-${id}"><span class="mark">${h ? "Have" : "Missing"}</span>
+          <span class="label"><span class="t">${label}</span>${where}<span class="id">${internal} · #${id}</span></span></li>`;
+      }).join("") + `</ul>`;
+    }
+    if (!body) body = `<p class="empty-done">All ${total} found.</p>`;
+
+    ledgers.insertAdjacentHTML("beforeend", `
+      <section class="ledger" id="${cat.key}">
+        <div class="ledger-head"><h2>${cat.title}</h2><span class="meta">${cat.achievement} · ${got}/${total}</span></div>
+        ${body}
+      </section>`);
+  }
+  renderMap();
+}
+
+// ---- Map ----
+// World positions come from the game's scene files. The terrain spans x/z -2000..2000, north (+z) up.
+const COLORS = { notes: "#f2f2ea", blueprints: "#5fb0e6", plated: "#e8b33c", clothing: "#c77dd6", footage: "#ef6b57" };
+const NO_LOC = { 379: "You start with it (from the crash site)", 477: "Craft it yourself" };
+const noLocText = (cat, it) => it[3] || (cat.key === "plated" && NO_LOC[it[0]]) || cat.where || "No fixed spot in the world";
+const toMap = (x, z) => [(x + 2000) / 4 , (2000 - z) / 4];
+const placeText = l => l[2] === "Overworld" ? "Above ground" : l[2];
+let selected = null;
+
+function itemInfo(id) {
+  for (const cat of CATEGORIES) for (const [, items] of cat.groups) for (const it of items) if (it[0] === id) return { cat, it };
+  return null;
+}
+
+function renderMap() {
+  const svg = document.getElementById("map");
+  const onlyMissing = document.getElementById("onlyMissing").checked;
+  let pins = "", top = "";
+  for (const cat of CATEGORIES) {
+    const toggle = document.getElementById("show-" + cat.key);
+    if (!toggle || !toggle.checked) continue;
+    for (const [, items] of cat.groups) for (const [id, label, internal] of items) {
+      const h = state[cat.check](id, internal);
+      if (onlyMissing && h && selected !== id) continue;
+      for (const l of LOCS[id] || []) {
+        const [px, py] = toMap(l[0], l[1]);
+        const sel = selected === id;
+        const r = sel ? 11 : 7.5;
+        const shape = l[3]
+          ? `<rect x="${px - r * .8}" y="${py - r * .8}" width="${r * 1.6}" height="${r * 1.6}" transform="rotate(45 ${px} ${py})" fill="${COLORS[cat.key]}"/>`
+          : `<circle cx="${px}" cy="${py}" r="${r}" fill="${COLORS[cat.key]}"/>`;
+        const g = `<g class="pin ${h ? "have" : "miss"}${sel ? " sel" : ""}" data-id="${id}" tabindex="0" role="button" aria-label="${label}"><title>${label} (${placeText(l)})</title>${shape}</g>`;
+        if (sel) top += `<circle class="halo" cx="${px}" cy="${py}" r="20"/>` + g; else pins += g;
+      }
+    }
+  }
+  if (state.player) {
+    const [px, py] = toMap(state.player[0], state.player[2]);
+    pins += `<g class="you"><circle cx="${px}" cy="${py}" r="7"/><text x="${px + 11}" y="${py + 5}">You</text></g>`;
+  }
+  svg.innerHTML = pins + top;
+}
+
+function select(id, scrollMap) {
+  selected = id;
+  const info = itemInfo(id);
+  const box = document.getElementById("info");
+  if (info) {
+    const [, label, internal] = info.it;
+    const h = state[info.cat.check](id, internal);
+    const locs = LOCS[id] || [];
+    box.innerHTML = `<span class="t">${label}</span>
+      <span class="sub">${info.cat.title} · ${h ? "You have this" : "Missing"}</span>
+      ${locs.map(l => `<span>${placeText(l)}</span><span class="coords">x ${l[0]}, z ${l[1]}</span>`).join("") || `<span>${noLocText(info.cat, info.it)}</span>`}`;
+  }
+  render();
+  if (scrollMap) document.querySelector(".mapcard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+
+document.getElementById("map").addEventListener("click", e => {
+  const g = e.target.closest(".pin"); if (!g) return;
+  const id = +g.dataset.id; select(id, false);
+  document.getElementById("item-" + id)?.scrollIntoView({ block: "nearest" });
+});
+document.getElementById("map").addEventListener("keydown", e => {
+  const g = e.target.closest(".pin"); if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); select(+g.dataset.id, false); }
+});
+document.getElementById("ledgers").addEventListener("click", e => {
+  const b = e.target.closest(".mapbtn"); if (b) select(+b.dataset.id, true);
+});
+Object.keys(COLORS).forEach(k => document.getElementById("show-" + k).addEventListener("change", renderMap));
+
+function showExample() {
+  state = exampleState();
+  document.getElementById("status").className = "status";
+  document.getElementById("status").innerHTML = `<span class="tag">Example</span>Sample progress, not yours. Load your save to see your own list.`;
+  render();
+}
+
+const fileInput = document.getElementById("file");
+document.getElementById("pick").addEventListener("click", () => fileInput.click());
+document.getElementById("sample").addEventListener("click", showExample);
+fileInput.addEventListener("change", e => { if (e.target.files.length) loadFiles([...e.target.files]); fileInput.value = ""; });
+document.getElementById("onlyMissing").addEventListener("change", () => { try { localStorage.setItem("onlyMissing", document.getElementById("onlyMissing").checked ? "1" : ""); } catch {} render(); });
+document.getElementById("copy").addEventListener("click", async e => {
+  const text = document.getElementById("pathText").textContent;
+  try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; }
+  catch { const r = document.createRange(); r.selectNodeContents(document.getElementById("pathText")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); e.target.textContent = "Press Ctrl+C"; }
+  setTimeout(() => e.target.textContent = "Copy path", 2000);
+});
+const drop = document.getElementById("drop");
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", e => { if (e.dataTransfer.files.length) loadFiles([...e.dataTransfer.files]); });
+
+try { document.getElementById("onlyMissing").checked = localStorage.getItem("onlyMissing") === "1"; } catch {}
+showExample();
+</script>
+</body>
+</html>
