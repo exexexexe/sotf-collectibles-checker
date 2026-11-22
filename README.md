@@ -28,6 +28,24 @@ Achievements that are only a count, like logs placed or days survived, are left 
 
 Your save is read in your browser and never uploaded anywhere. Click **Show example save** to try the page without a save of your own.
 
+## In-game mod (live tracking)
+
+The web page only sees your progress as of your last save. The **CollectiblesTracker** mod tracks the same achievements live, while you play:
+
+- Press **F7** to open a panel with your counts and the exact items you're missing. It also shows where each one is and how far away it is. **Page Up / Page Down** switch between achievements.
+- Press **F8** to show or hide markers on your GPS for missing notes, blueprints, weapons to plate, clothing and action cameras. Each marker disappears once you have that item.
+- When something counts, an on-screen message shows your new total.
+
+> **Early version:** the mod builds and installs, but hasn't been tested in-game yet. The GPS markers are the part most likely to need fixing. If something doesn't work, please open an issue and include your RedLoader log.
+
+**Install**
+
+1. Install [RedLoader](https://github.com/ToniMacaroni/RedLoader) for Sons of the Forest.
+2. Download `CollectiblesTracker.zip` from the [Releases page](https://github.com/exexexexe/sotf-collectibles-checker/releases).
+3. Extract it into your game folder, so that `Mods\CollectiblesTracker.dll` ends up next to your other mods.
+
+You can change the keys, marker range and other options in the in-game mod settings. The source code is in [`mod/`](mod/). The mod's item lists are generated from this page's lists, so the two always match.
+
 ## How it works
 
 The page is a single static `index.html` plus `map.jpg`. It reads `PlayerStateSaveData.json` and checks these keys:

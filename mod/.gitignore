@@ -1,0 +1,5 @@
+bin/
+obj/
+ReleaseBuild/
+sdk-ref/
+.vs/
