@@ -131,6 +131,34 @@ li.miss .where { color: var(--ink); opacity: .8; }
 .mapbtn { font: 500 12px var(--font-body); color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .mapbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 ul.items li.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.npcs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.npc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+.npc.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.npc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.npc-head .t { font-family: var(--font-display); font-size: 19px; }
+.mood { font-family: var(--font-mono); font-size: 11px; padding: 1px 8px; border-radius: 99px; white-space: nowrap; }
+.mood.pos { color: var(--have); background: var(--have-soft); }
+.mood.neg { color: var(--miss); background: var(--miss-soft); }
+.mood.mid { color: var(--muted); border: 1px solid var(--line); }
+.senti { position: relative; height: 8px; border-radius: 99px; background: var(--line); }
+.senti::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1.5px; background: var(--muted); }
+.senti i { position: absolute; top: 0; bottom: 0; border-radius: 99px; }
+.senti i.pos { background: var(--have); }
+.senti i.neg { background: var(--miss); }
+.scale { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.scale b { color: var(--ink); font-weight: 500; font-size: 13px; }
+.npc .sub { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.tribes { display: grid; gap: 2px; }
+.tribe { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 160px) 52px 52px; gap: 12px; align-items: center; padding: 6px 10px; border-radius: 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.tribe:nth-child(even) { background: var(--surface); }
+.tribe.head { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: none; }
+.tribe .n { font-family: var(--font-mono); font-size: 12.5px; text-align: right; }
+.tribe .sub { display: block; color: var(--muted); font-size: 12px; }
+@media (max-width: 520px) { .tribe { grid-template-columns: minmax(0, 1fr) 90px 44px; } .tribe .anger { display: none; } }
+.note { color: var(--muted); font-size: 13.5px; }
+.mapbox svg .npcpin circle { stroke: #10140f; stroke-width: 2; fill: #4fd1b5; }
+.mapbox svg .npcpin.sel circle { stroke: #fff; stroke-width: 3; }
+.mapbox svg .npcpin { cursor: pointer; }
 @media (prefers-reduced-motion: no-preference) { .bar i { transition: width .4s ease; } }
 </style>
 </head>
@@ -175,6 +203,7 @@ ul.items li.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
         <label><input type="checkbox" id="show-plated" checked><span class="sw" style="background:#e8b33c"></span>Weapons to plate</label>
         <label><input type="checkbox" id="show-clothing" checked><span class="sw" style="background:#c77dd6"></span>Clothing</label>
         <label><input type="checkbox" id="show-footage" checked><span class="sw" style="background:#ef6b57"></span>Action cameras</label>
+        <label><input type="checkbox" id="show-companions" checked><span class="sw" style="background:#4fd1b5"></span>Kelvin and Virginia</label>
       </div>
       <div class="key">
         <span><span class="sw" style="background:var(--muted)"></span>Above ground</span>
@@ -186,6 +215,11 @@ ul.items li.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
     </div>
   </section>
 
+  <section class="ledger" id="sentiment">
+    <div class="ledger-head"><h2>Sentiment</h2><span class="meta">How they feel about you, −100 to +100</span></div>
+    <div id="sentimentBody"></div>
+  </section>
+
   <div class="controls">
     <label class="toggle"><input type="checkbox" id="onlyMissing"> Show only what I'm missing</label>
   </div>
@@ -194,6 +228,7 @@ ul.items li.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
 
   <footer>
     <p>Your file is read in your browser and never uploaded. The checker reads the save's player state: <code>hasOwned</code> for notes and clothing, <code>DiscoverablePageUnlocked</code> for blueprints, <code>isPlated</code> for weapons, <code>consumed</code> for food, <code>crafted</code> for crafted and printed items, and <code>ActionCameraVideoCollected</code> for videos. It checks one save at a time.</p>
+    <p>Sentiment comes from the save's world simulation (<code>SaveData.json</code>, <code>VailWorldSim</code>): each NPC remembers how it feels about the players from −100 to +100, plus fear and anger. Only NPCs still alive are counted. Virginia and Kelvin also carry an Affection stat, shown when the save has one. The mood words are this page's own bands, not the game's thresholds, and NPC type names are the game's internal names.</p>
     <p>Item names are the game's internal names, made readable. A note or piece of clothing counts once you have picked it up. Blueprints count once they are added to your blueprint book. A weapon counts once it has been plated at the Solafite plater. Food counts once you have eaten it, and crafted or printed items once you have made one. Count-based achievements (logs placed, days survived, holes dug) are left out, since Steam already shows those numbers.</p>
   </footer>
 </div>
@@ -433,6 +468,37 @@ const LOCS = {"716":[[1478,74,"Overworld",0]],"525":[[1026,1642,"Overworld",0],[
 
 const pad8 = n => String(n).padStart(8, "0");
 let state = null;
+let world = null;
+
+// Sons.Ai.Vail.VailActorTypeId, read from the game's Sons.Ai.Vail.dll.
+const ACTOR_TYPES = {1:"Rabbit",2:"Squirrel",3:"Turtle",4:"Shark",5:"Seagull",6:"Eagle",7:"Duck",8:"Timmy",9:"Robby",10:"Virginia",
+  11:"Fingers",12:"Carl",13:"Andy",14:"Danny",15:"Billy",16:"GoldMask",17:"Moose",18:"Baby",19:"Twins",20:"MrPuffy",21:"MissPuffy",
+  23:"Angel",24:"Salmon",25:"Brandy",26:"Crystal",27:"Destiny",28:"MuddyFemale",29:"MuddyMale",30:"HeavyMale",32:"Bat",33:"Deer",
+  34:"Bluebird",35:"Hummingbird",36:"KillerWhale",37:"LandTurtle",38:"FatMale",39:"FatFemale",40:"John2",41:"FacelessMale",42:"Demon",
+  43:"PaintedMale",44:"PaintedFemale",45:"DemonBoss",46:"PuffyBossMale",47:"PuffyBossFemale",48:"BossMutant",49:"CreepyVirginia",
+  50:"Armsy",51:"Frank",52:"Eddy",53:"Greg",54:"Henry",55:"Igor",56:"Elise",57:"Raccoon",58:"Legsy",59:"Holey",60:"Skunk"};
+const KELVIN = 9, VIRGINIA = 10;
+const typeName = t => t === KELVIN ? "Kelvin" : (ACTOR_TYPES[t] || `Type ${t}`).replace(/([a-z])([A-Z0-9])/g, "$1 $2");
+
+// The world sim lives in SaveData.json -> Data.VailWorldSim (a JSON string). Each actor's feelings
+// are in InfluenceMemory, one entry per source; the "Player" entry is how it feels about the players.
+// Dead actors drop out of Actors but can linger in InfluenceMemory, so only actors still listed count.
+function parseWorld(text) {
+  const outer = JSON.parse(text);
+  let w = outer?.Data?.VailWorldSim;
+  if (typeof w === "string") w = JSON.parse(w);
+  if (!w || !Array.isArray(w.Actors)) return null;
+  const toYou = new Map((w.InfluenceMemory || []).map(m => [m.UniqueId, (m.Influences || []).find(i => i.TypeId === "Player")]));
+  return w.Actors.map(a => ({ id: a.UniqueId, type: a.TypeId, pos: a.Position, stats: a.Stats || {}, you: toYou.get(a.UniqueId) }));
+}
+function exampleWorld() {
+  return [
+    { id: 1, type: KELVIN, pos: { x: -705, z: -55 }, stats: {}, you: { TypeId: "Player", Sentiment: 34 } },
+    { id: 2, type: VIRGINIA, pos: { x: -310, z: 415 }, stats: { Affection: 41 }, you: { TypeId: "Player", Sentiment: 71, Fear: 4 } },
+    ...[[29, 24, -6, 12, 4], [28, 11, -2, 5, 0], [12, 9, -18, 30, 8], [43, 6, -40, 55, 20], [11, 3, 0, 0, 0]].flatMap(([type, n, s, f, a]) =>
+      Array.from({ length: n }, (_, i) => ({ id: 1000 + type * 50 + i, type, stats: {}, you: { TypeId: "Player", Sentiment: s + (i % 3) * 4 - 4, Fear: f, Anger: a } }))),
+  ];
+}
 
 function stateFromEntries(entries) {
   const on = new Set(entries.filter(e => e && e.BoolValue === true).map(e => e.Name));
@@ -475,18 +541,23 @@ async function loadFiles(files) {
   status.className = "status";
   status.textContent = "Reading…";
   try {
-    let text = null, label = "";
+    let text = null, worldText = null, label = "";
     for (const f of files) {
       if (/\.zip$/i.test(f.name)) {
         const zip = await JSZip.loadAsync(f);
         const entry = Object.values(zip.files).find(z => /(^|\/)PlayerStateSaveData\.json$/i.test(z.name));
         if (!entry) throw new Error(`${f.name} has no PlayerStateSaveData.json inside. Pick the SaveData.zip from a save folder.`);
-        text = await entry.async("string"); label = f.name; break;
+        text = await entry.async("string"); label = f.name;
+        const we = Object.values(zip.files).find(z => /(^|\/)SaveData\.json$/i.test(z.name));
+        if (we) worldText = await we.async("string");
+        break;
       }
-      if (/PlayerStateSaveData\.json$/i.test(f.name)) { text = await f.text(); label = f.name; break; }
+      if (/PlayerStateSaveData\.json$/i.test(f.name)) { text = await f.text(); label = f.name; }
+      else if (/(^|[\\/])SaveData\.json$/i.test(f.name)) worldText = await f.text();
     }
     if (text === null) throw new Error("Pick SaveData.zip, or PlayerStateSaveData.json for older saves.");
     state = stateFromEntries(parsePlayerState(text));
+    try { world = worldText ? parseWorld(worldText) : null; } catch { world = null; }
     status.innerHTML = `<span class="tag">Your save</span>Loaded ${escapeHtml(label)}`;
     render();
   } catch (err) {
@@ -543,7 +614,88 @@ function render() {
         ${body}
       </section>`);
   }
+  renderSentiment();
   renderMap();
+}
+
+// ---- Sentiment ----
+// Mood bands are this page's own wording, not thresholds from the game.
+function mood(s) {
+  if (s >= 60) return ["Trusts you", "pos"];
+  if (s >= 20) return ["Friendly", "pos"];
+  if (s > -20) return ["Neutral", "mid"];
+  if (s > -60) return ["Wary", "neg"];
+  return ["Hostile", "neg"];
+}
+const fmt = v => { const r = Math.round(v); return (r > 0 ? "+" : r < 0 ? "−" : "") + Math.abs(r); };
+function sentiBar(s) {
+  const w = Math.min(Math.abs(s), 100) / 2;
+  return `<span class="senti" role="img" aria-label="Sentiment ${fmt(s)}"><i class="${s < 0 ? "neg" : "pos"}" style="left:${s < 0 ? 50 - w : 50}%;width:${w}%"></i></span>`;
+}
+
+function renderSentiment() {
+  const el = document.getElementById("sentimentBody");
+  if (!world) {
+    el.innerHTML = `<p class="note">This save has no NPC data. It is in the full <b>SaveData.zip</b> of a single-player or hosted game; a guest's save in someone else's game may not include it. For older saves with loose files, pick <b>SaveData.json</b> together with PlayerStateSaveData.json.</p>`;
+    return;
+  }
+  const comps = world.filter(a => a.type === KELVIN || a.type === VIRGINIA).sort((a, b) => a.type - b.type || a.id - b.id);
+  const kelvins = comps.filter(a => a.type === KELVIN).length;
+  let html = `<div class="npcs">`;
+  for (const t of [KELVIN, VIRGINIA]) if (!comps.some(a => a.type === t))
+    html += `<div class="npc"><div class="npc-head"><span class="t">${typeName(t)}</span><span class="mood mid">Not in save</span></div><span class="sub">Not found among the living. Either not met yet or dead.</span></div>`;
+  for (const a of comps) {
+    const s = a.you?.Sentiment ?? 0;
+    const [m, cls] = mood(s);
+    const extra = [
+      a.you?.Fear ? `Fear of you ${Math.round(a.you.Fear)}` : "",
+      a.you?.Anger ? `Anger at you ${Math.round(a.you.Anger)}` : "",
+      a.stats.Affection != null ? `Affection ${Math.round(a.stats.Affection)}` : "",
+    ].filter(Boolean).join(" · ") || "No fear or anger toward you";
+    const tag = a.type === KELVIN && kelvins > 1 ? ` <span class="sub">#${a.id}</span>` : "";
+    html += `<div class="npc${selected === "npc:" + a.id ? " sel" : ""}" id="npc-${a.id}">
+      <div class="npc-head"><span class="t">${typeName(a.type)}${tag}</span><span class="mood ${cls}">${m}</span></div>
+      ${sentiBar(s)}
+      <div class="scale"><span>−100</span><b>${fmt(s)}</b><span>+100</span></div>
+      <span class="sub">${extra}</span>
+      ${a.pos ? `<button class="mapbtn" type="button" data-npc="${a.id}">Show on map</button>` : ""}
+    </div>`;
+  }
+  html += `</div>`;
+  if (kelvins > 1) html += `<p class="note">This save has ${kelvins} Kelvins alive; each one keeps its own sentiment.</p>`;
+
+  const groups = new Map();
+  for (const a of world) {
+    if (a.type === KELVIN || a.type === VIRGINIA || !a.you) continue;
+    const g = groups.get(a.type) || { n: 0, s: 0, f: 0, an: 0, liked: 0, hated: 0 };
+    const s = a.you.Sentiment || 0;
+    g.n++; g.s += s; g.f += a.you.Fear || 0; g.an += a.you.Anger || 0;
+    if (s >= 20) g.liked++; if (s <= -20) g.hated++;
+    groups.set(a.type, g);
+  }
+  if (groups.size) {
+    const rows = [...groups].sort((x, y) => y[1].n - x[1].n).map(([t, g]) => {
+      const s = g.s / g.n;
+      const split = [g.liked ? `${g.liked} friendly` : "", g.hated ? `${g.hated} hostile` : ""].filter(Boolean).join(", ");
+      return `<div class="tribe"><span>${typeName(t)}<span class="sub">${g.n} remember you${split ? " · " + split : ""}</span></span>
+        <span title="Average sentiment ${fmt(s)}">${sentiBar(s)}</span>
+        <span class="n">${fmt(s)}</span><span class="n anger" title="Average fear of you">${Math.round(g.f / g.n)}</span></div>`;
+    }).join("");
+    html += `<div class="group-label">Everyone else who remembers you</div>
+      <div class="tribes"><div class="tribe head"><span>Type</span><span>Average</span><span class="n">Mood</span><span class="n anger">Fear</span></div>${rows}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function selectNpc(id, scrollMap) {
+  const a = world?.find(x => x.id === id); if (!a) return;
+  selected = "npc:" + id;
+  const s = a.you?.Sentiment ?? 0;
+  document.getElementById("info").innerHTML = `<span class="t">${typeName(a.type)}</span>
+    <span class="sub">Sentiment ${fmt(s)} · ${mood(s)[0]}</span>
+    <span class="sub">Where it was when you saved</span><span class="coords">x ${Math.round(a.pos.x)}, z ${Math.round(a.pos.z)}</span>`;
+  render();
+  if (scrollMap) document.querySelector(".mapcard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
 
 // ---- Map ----
@@ -586,6 +738,15 @@ function renderMap() {
     const [px, py] = toMap(state.player[0], state.player[2]);
     pins += `<g class="you"><circle cx="${px}" cy="${py}" r="7"/><text x="${px + 11}" y="${py + 5}">You</text></g>`;
   }
+  if (world && document.getElementById("show-companions").checked) {
+    for (const a of world) {
+      if ((a.type !== KELVIN && a.type !== VIRGINIA) || !a.pos) continue;
+      const [px, py] = toMap(a.pos.x, a.pos.z);
+      const sel = selected === "npc:" + a.id;
+      const g = `<g class="npcpin${sel ? " sel" : ""}" data-npc="${a.id}" tabindex="0" role="button" aria-label="${typeName(a.type)}"><circle cx="${px}" cy="${py}" r="${sel ? 10 : 7.5}"/><text x="${px + 12}" y="${py + 5}">${typeName(a.type)}</text></g>`;
+      if (sel) top += `<circle class="halo" cx="${px}" cy="${py}" r="20"/>` + g; else pins += g;
+    }
+  }
   svg.innerHTML = pins + top;
 }
 
@@ -606,13 +767,20 @@ function select(id, scrollMap) {
 }
 
 document.getElementById("map").addEventListener("click", e => {
+  const n = e.target.closest(".npcpin");
+  if (n) { selectNpc(+n.dataset.npc, false); document.getElementById("npc-" + n.dataset.npc)?.scrollIntoView({ block: "nearest" }); return; }
   const g = e.target.closest(".pin"); if (!g) return;
   const id = +g.dataset.id; select(id, false);
   document.getElementById("item-" + id)?.scrollIntoView({ block: "nearest" });
 });
 document.getElementById("map").addEventListener("keydown", e => {
   const g = e.target.closest(".pin"); if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); select(+g.dataset.id, false); }
+  const n = e.target.closest(".npcpin"); if (n && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selectNpc(+n.dataset.npc, false); }
 });
+document.getElementById("sentiment").addEventListener("click", e => {
+  const b = e.target.closest(".mapbtn"); if (b) selectNpc(+b.dataset.npc, true);
+});
+document.getElementById("show-companions").addEventListener("change", renderMap);
 document.getElementById("ledgers").addEventListener("click", e => {
   const b = e.target.closest(".mapbtn"); if (b) select(+b.dataset.id, true);
 });
@@ -620,6 +788,7 @@ Object.keys(COLORS).forEach(k => document.getElementById("show-" + k).addEventLi
 
 function showExample() {
   state = exampleState();
+  world = exampleWorld();
   document.getElementById("status").className = "status";
   document.getElementById("status").innerHTML = `<span class="tag">Example</span>Sample progress, not yours. Load your save to see your own list.`;
   render();
